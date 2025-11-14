@@ -1,0 +1,283 @@
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/auth';
+import * as authService from '../services/auth.service';
+import { generateToken } from '../middleware/auth';
+import { sendSuccess } from '../utils/responseFormatter';
+import { BadRequestError } from '../utils/customErrors';
+import {
+  isValidEmail,
+  isValidPassword,
+  isValidAge,
+  isValidName,
+  getPasswordError,
+  sanitizeString,
+} from '../utils/validators';
+import { logger } from '../utils/logger';
+
+/**
+ * Sign-up endpoint - H1
+ * POST /api/auth/signup
+ */
+export async function signup(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { firstName, lastName, age, email, password, confirmPassword } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !age || !email || !password || !confirmPassword) {
+      throw new BadRequestError('All fields are required');
+    }
+
+    // Sanitize inputs
+    const sanitizedFirstName = sanitizeString(firstName);
+    const sanitizedLastName = sanitizeString(lastName);
+    const sanitizedEmail = sanitizeString(email).toLowerCase();
+
+    // Validate names
+    if (!isValidName(sanitizedFirstName)) {
+      throw new BadRequestError('First name must contain only letters and be 2-50 characters long');
+    }
+
+    if (!isValidName(sanitizedLastName)) {
+      throw new BadRequestError('Last name must contain only letters and be 2-50 characters long');
+    }
+
+    // Validate age
+    if (!isValidAge(age)) {
+      throw new BadRequestError('Age must be at least 13');
+    }
+
+    // Validate email
+    if (!isValidEmail(sanitizedEmail)) {
+      throw new BadRequestError('Invalid email format');
+    }
+
+    // Validate password
+    if (!isValidPassword(password)) {
+      const passwordError = getPasswordError(password);
+      throw new BadRequestError(passwordError || 'Invalid password');
+    }
+
+    // Validate password confirmation
+    if (password !== confirmPassword) {
+      throw new BadRequestError('Passwords do not match');
+    }
+
+    // Create user
+    const user = await authService.createUser({
+      firstName: sanitizedFirstName,
+      lastName: sanitizedLastName,
+      age,
+      email: sanitizedEmail,
+      password,
+    });
+
+    return sendSuccess(res, 201, { id: user.id }, 'Account created successfully');
+  } catch (error) {
+    logger.error('Signup error', error);
+    throw error;
+  }
+}
+
+/**
+ * Login endpoint - H2
+ * POST /api/auth/login
+ */
+export async function login(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { email, password } = req.body;
+
+    // Validate required fields
+    if (!email || !password) {
+      throw new BadRequestError('Email and password are required');
+    }
+
+    // Sanitize email
+    const sanitizedEmail = sanitizeString(email).toLowerCase();
+
+    // Validate email format
+    if (!isValidEmail(sanitizedEmail)) {
+      throw new BadRequestError('Invalid email format');
+    }
+
+    // Login user
+    const user = await authService.loginUser(sanitizedEmail, password);
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    return sendSuccess(
+      res,
+      200,
+      {
+        token,
+        user,
+      },
+      'Login successful'
+    );
+  } catch (error) {
+    logger.error('Login error', error);
+    throw error;
+  }
+}
+
+/**
+ * Logout endpoint - H2
+ * POST /api/auth/logout
+ */
+export async function logout(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    // Note: JWT tokens are stateless, so logout is handled on the client side
+    // by removing the token from storage. This endpoint is mainly for logging purposes.
+
+    if (req.user) {
+      logger.info(`User logged out: ${req.user.userId}`);
+    }
+
+    return sendSuccess(res, 200, null, 'Logout successful');
+  } catch (error) {
+    logger.error('Logout error', error);
+    throw error;
+  }
+}
+
+/**
+ * Forgot password endpoint - H3
+ * POST /api/auth/forgot-password
+ */
+export async function forgotPassword(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { email } = req.body;
+
+    // Validate required field
+    if (!email) {
+      throw new BadRequestError('Email is required');
+    }
+
+    // Sanitize email
+    const sanitizedEmail = sanitizeString(email).toLowerCase();
+
+    // Validate email format
+    if (!isValidEmail(sanitizedEmail)) {
+      throw new BadRequestError('Invalid email format');
+    }
+
+    // Request password reset (always returns success to prevent email enumeration)
+    await authService.requestPasswordReset(sanitizedEmail);
+
+    // Return generic success message
+    return sendSuccess(
+      res,
+      202,
+      null,
+      'If an account exists with this email, a password reset link has been sent'
+    );
+  } catch (error) {
+    logger.error('Forgot password error', error);
+    throw error;
+  }
+}
+
+/**
+ * Reset password endpoint - H3
+ * POST /api/auth/reset-password
+ */
+export async function resetPassword(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    // Validate required fields
+    if (!token || !password || !confirmPassword) {
+      throw new BadRequestError('All fields are required');
+    }
+
+    // Validate password
+    if (!isValidPassword(password)) {
+      const passwordError = getPasswordError(password);
+      throw new BadRequestError(passwordError || 'Invalid password');
+    }
+
+    // Validate password confirmation
+    if (password !== confirmPassword) {
+      throw new BadRequestError('Passwords do not match');
+    }
+
+    // Reset password
+    await authService.resetPassword(token, password);
+
+    return sendSuccess(res, 200, null, 'Password reset successful');
+  } catch (error) {
+    logger.error('Reset password error', error);
+    throw error;
+  }
+}
+
+/**
+ * OAuth callback endpoint (Google/Facebook) - H2
+ * POST /api/auth/oauth
+ */
+export async function oauthCallback(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { provider, providerId, email, firstName, lastName } = req.body;
+
+    // Validate required fields
+    if (!provider || !providerId || !email || !firstName || !lastName) {
+      throw new BadRequestError('Missing required OAuth data');
+    }
+
+    // Validate provider
+    if (provider !== 'google' && provider !== 'facebook') {
+      throw new BadRequestError('Invalid OAuth provider');
+    }
+
+    // Sanitize inputs
+    const sanitizedEmail = sanitizeString(email).toLowerCase();
+    const sanitizedFirstName = sanitizeString(firstName);
+    const sanitizedLastName = sanitizeString(lastName);
+
+    // Check if user exists
+    const existingUser = await authService.getUserByEmail(sanitizedEmail);
+
+    let userResponse;
+
+    if (existingUser) {
+      // User exists, log them in
+      logger.info(`OAuth login for existing user: ${existingUser.id}`);
+      userResponse = await authService.getUserById(existingUser.id);
+    } else {
+      // Create new user
+      userResponse = await authService.createUser({
+        firstName: sanitizedFirstName,
+        lastName: sanitizedLastName,
+        age: 18, // Default age for OAuth users
+        email: sanitizedEmail,
+        password: providerId, // Use providerId as dummy password (won't be used for login)
+        provider,
+        providerId,
+      });
+
+      logger.info(`New OAuth user created: ${userResponse.id}`);
+    }
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: userResponse.id,
+      email: userResponse.email,
+    });
+
+    return sendSuccess(
+      res,
+      200,
+      {
+        token,
+        user: userResponse,
+      },
+      'OAuth login successful'
+    );
+  } catch (error) {
+    logger.error('OAuth callback error', error);
+    throw error;
+  }
+}
