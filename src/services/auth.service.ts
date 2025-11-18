@@ -72,7 +72,7 @@ export async function createUser(userData: CreateUserData): Promise<UserResponse
       email: userData.email,
       password: hashedPassword,
       provider: userData.provider || 'email',
-      providerId: userData.providerId,
+      providerId: userData.providerId || '',
       createdAt: now,
       updatedAt: now,
       isActive: true,
