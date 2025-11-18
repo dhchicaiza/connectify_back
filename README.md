@@ -1,7 +1,5 @@
 # 🎥 Plataforma de Videoconferencias - Mini Proyecto #3
 
-**Curso:** 750018C PROYECTO INTEGRADOR I 2025-2
-
 ## 📋 Descripción del Proyecto
 
 Plataforma web de videoconferencia que permite la creación de reuniones, chat en tiempo real, transmisión de voz y vídeo entre 2 y 10 participantes. El sistema incluye autenticación multicanal (OAuth + manual), interfaz responsiva y accesible, y comunicación en tiempo real mediante WebSockets y WebRTC.
@@ -449,16 +447,59 @@ Authenticate with email and password.
 
 ---
 
-#### OAuth Login (H2)
-**POST** `/api/auth/oauth`
+#### Google Sign-In (H2) - RECOMMENDED
+**POST** `/api/auth/google`
 
-Login or register via Google/Facebook OAuth.
+Login or register via Google Sign-In. This endpoint verifies the Google ID token on the backend for maximum security.
 
 **Request Body:**
 ```json
 {
-  "provider": "google",
-  "providerId": "google-user-id",
+  "idToken": "google-firebase-id-token-here"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "token": "jwt.token.here",
+    "user": {
+      "id": "uuid",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john@example.com",
+      "age": 18,
+      "provider": "google",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    },
+    "isNewUser": false
+  },
+  "message": "Login successful with Google"
+}
+```
+
+**Errors:**
+- `400` - Invalid or missing ID token
+- `401` - Invalid Google authentication token
+- `429` - Too many login attempts (5 per 10 min)
+
+---
+
+#### OAuth Login (H2) - LEGACY
+**POST** `/api/auth/oauth`
+
+**DEPRECATED:** Use `/api/auth/google` for Google Sign-In instead.
+
+Login or register via Facebook OAuth (or legacy Google OAuth).
+
+**Request Body:**
+```json
+{
+  "provider": "facebook",
+  "providerId": "facebook-user-id",
   "email": "john@example.com",
   "firstName": "John",
   "lastName": "Doe"
@@ -863,6 +904,148 @@ Check if server is running.
 - Configurar reglas de seguridad
 - Obtener credenciales para backend (.env)
 
+### Configuración de Google Sign-In
+
+#### 1. Habilitar Google Authentication en Firebase Console
+
+1. Ve a [Firebase Console](https://console.firebase.google.com/)
+2. Selecciona tu proyecto **connectify5**
+3. Ve a **Authentication** → **Sign-in method**
+4. Habilita **Google** como proveedor de autenticación
+5. Guarda los cambios
+
+#### 2. Configurar credenciales del backend
+
+El backend ya está configurado para usar Firebase Admin SDK. Asegúrate de tener estas variables en tu archivo `.env`:
+
+```bash
+# Firebase Configuration
+FIREBASE_PROJECT_ID=connectify5
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@connectify5.iam.gserviceaccount.com
+```
+
+**Para obtener estas credenciales:**
+
+1. Ve a Firebase Console → **Project Settings** (⚙️ ícono)
+2. Ve a la pestaña **Service accounts**
+3. Click en **Generate new private key**
+4. Descarga el archivo JSON
+5. Copia los valores al archivo `.env`:
+   - `project_id` → `FIREBASE_PROJECT_ID`
+   - `private_key` → `FIREBASE_PRIVATE_KEY` (mantén los `\n` en el string)
+   - `client_email` → `FIREBASE_CLIENT_EMAIL`
+
+#### 3. Configuración del Frontend
+
+En tu aplicación frontend (React/Vite), usa esta configuración:
+
+```typescript
+// src/config/firebase.ts
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBCI_S-ZWCazCDtcHG6FMmw6vUL9cBSTUE",
+  authDomain: "connectify5.firebaseapp.com",
+  projectId: "connectify5",
+  storageBucket: "connectify5.firebasestorage.app",
+  messagingSenderId: "491306603072",
+  appId: "1:491306603072:web:ea607518cfe1b4e2fe45a5",
+  measurementId: "G-4XM4WSXHHT"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+
+export { auth, googleProvider };
+```
+
+#### 4. Implementar Google Sign-In en el Frontend
+
+```typescript
+// Ejemplo de uso en un componente de React
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "./config/firebase";
+
+async function handleGoogleSignIn() {
+  try {
+    // 1. Autenticar con Google usando Firebase
+    const result = await signInWithPopup(auth, googleProvider);
+
+    // 2. Obtener el ID token
+    const idToken = await result.user.getIdToken();
+
+    // 3. Enviar el token al backend
+    const response = await fetch('http://localhost:3000/api/auth/google', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idToken }),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // 4. Guardar el JWT token del backend
+      localStorage.setItem('token', data.data.token);
+
+      // 5. Redirigir al dashboard
+      console.log('Usuario autenticado:', data.data.user);
+      console.log('Es nuevo usuario:', data.data.isNewUser);
+    }
+  } catch (error) {
+    console.error('Error en Google Sign-In:', error);
+  }
+}
+```
+
+#### 5. Flujo de Autenticación
+
+```
+┌─────────────┐           ┌──────────────┐           ┌──────────────┐
+│   Frontend  │           │   Firebase   │           │   Backend    │
+│   (React)   │           │    (Google)  │           │  (Node.js)   │
+└─────────────┘           └──────────────┘           └──────────────┘
+      │                          │                          │
+      │  1. signInWithPopup()    │                          │
+      │─────────────────────────>│                          │
+      │                          │                          │
+      │  2. Google Login Page    │                          │
+      │<─────────────────────────│                          │
+      │                          │                          │
+      │  3. User authenticates   │                          │
+      │─────────────────────────>│                          │
+      │                          │                          │
+      │  4. ID Token             │                          │
+      │<─────────────────────────│                          │
+      │                          │                          │
+      │  5. POST /api/auth/google                          │
+      │     { idToken: "..." }   │                          │
+      │────────────────────────────────────────────────────>│
+      │                          │                          │
+      │                          │  6. Verify ID Token      │
+      │                          │<─────────────────────────│
+      │                          │                          │
+      │                          │  7. Token Valid          │
+      │                          │─────────────────────────>│
+      │                          │                          │
+      │  8. JWT Token + User Data                           │
+      │<────────────────────────────────────────────────────│
+      │                          │                          │
+```
+
+#### 6. Ventajas de esta implementación
+
+✅ **Seguridad:** El backend verifica directamente con Firebase que el token es legítimo
+✅ **Sin credenciales en el frontend:** No necesitas Google Client Secret en el cliente
+✅ **Automatización:** Si el usuario ya tiene una cuenta con el mismo email, se logea automáticamente
+✅ **Creación automática:** Si es un usuario nuevo, se crea la cuenta automáticamente
+✅ **Rate limiting:** Protección contra ataques de fuerza bruta (5 intentos por 10 min)
+
 ---
 
 ## 🔒 Seguridad
@@ -895,30 +1078,3 @@ Check if server is running.
 - **Accesibilidad:** axe DevTools, Lighthouse
 - **API Testing:** Postman/Insomnia
 - **Monitoreo:** Render logs, Vercel Analytics
-
----
-
-## 📞 Contacto y Soporte
-
-- **Repositorio Backend:** [GitHub - meet_back](https://github.com/dhchicaiza/meet_back)
-- **Repositorio Frontend:** [GitHub - meet_front](#) (por crear)
-- **Gestión de Proyecto:** [TAIGA Board](#) (por configurar)
-- **Documentos Compartidos:** Google Drive del equipo
-
----
-
-## 📄 Licencia
-
-Este proyecto es parte del curso **750018C PROYECTO INTEGRADOR I 2025-2** y está desarrollado con fines académicos.
-
----
-
-## 🎯 Estado Actual del Proyecto
-
-**Sprint Actual:** Sprint 1 - Gestión de Usuarios + GUI Base
-**Progreso:** 0% (Proyecto en fase de planificación)
-**Próximo Hito:** Configuración inicial del proyecto y creación de estructura base
-
----
-
-**Última actualización:** 11 de noviembre de 2025
