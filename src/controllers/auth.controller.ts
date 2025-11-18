@@ -215,8 +215,51 @@ export async function resetPassword(req: AuthRequest, res: Response): Promise<Re
 }
 
 /**
- * OAuth callback endpoint (Google/Facebook) - H2
+ * Google Sign-In endpoint - H2
+ * POST /api/auth/google
+ */
+export async function googleSignIn(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { idToken } = req.body;
+
+    // Validate required field
+    if (!idToken) {
+      throw new BadRequestError('Google ID token is required');
+    }
+
+    // Login or create user with Google
+    const { user, isNewUser } = await authService.loginWithGoogle(idToken);
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    const message = isNewUser
+      ? 'Account created successfully with Google'
+      : 'Login successful with Google';
+
+    return sendSuccess(
+      res,
+      200,
+      {
+        token,
+        user,
+        isNewUser,
+      },
+      message
+    );
+  } catch (error) {
+    logger.error('Google sign-in error', error);
+    throw error;
+  }
+}
+
+/**
+ * OAuth callback endpoint (Facebook and legacy support) - H2
  * POST /api/auth/oauth
+ * @deprecated Use /api/auth/google for Google Sign-In
  */
 export async function oauthCallback(req: AuthRequest, res: Response): Promise<Response> {
   try {

@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { getFirestore, COLLECTIONS } from '../config/firebase';
+import { getFirestore, getAuth, COLLECTIONS } from '../config/firebase';
 import { User, CreateUserData, toUserResponse, UserResponse } from '../models/User';
 import { PasswordResetToken } from '../models/PasswordResetToken';
 import { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } from '../utils/customErrors';
@@ -347,6 +347,123 @@ export async function updateUserProfile(
     return toUserResponse(updatedUser);
   } catch (error) {
     logger.error('Error updating user profile', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify Google ID Token and extract user information
+ * @param idToken - Google ID token from Firebase Authentication
+ * @returns Decoded token with user information
+ */
+export async function verifyGoogleToken(idToken: string): Promise<{
+  uid: string;
+  email: string;
+  name: string;
+  picture?: string;
+  email_verified: boolean;
+}> {
+  try {
+    const auth = getAuth();
+
+    // Verify the ID token using Firebase Admin SDK
+    const decodedToken = await auth.verifyIdToken(idToken);
+
+    // Extract user information
+    const { uid, email, name, picture, email_verified } = decodedToken;
+
+    if (!email) {
+      throw new BadRequestError('Email not found in token');
+    }
+
+    if (!email_verified) {
+      throw new BadRequestError('Email not verified');
+    }
+
+    logger.info(`Google token verified for user: ${uid}`);
+
+    return {
+      uid,
+      email,
+      name: name || '',
+      picture,
+      email_verified,
+    };
+  } catch (error) {
+    logger.error('Error verifying Google token', error);
+    throw new UnauthorizedError('Invalid Google authentication token');
+  }
+}
+
+/**
+ * Login or create user with Google OAuth
+ * @param idToken - Google ID token from Firebase Authentication
+ * @returns User response and whether user was created
+ */
+export async function loginWithGoogle(idToken: string): Promise<{
+  user: UserResponse;
+  isNewUser: boolean;
+}> {
+  try {
+    // Verify the Google token
+    const tokenData = await verifyGoogleToken(idToken);
+
+    const db = getFirestore();
+
+    // Check if user exists by email
+    let user = await getUserByEmail(tokenData.email);
+
+    if (user) {
+      // User exists - update their info if needed
+      logger.info(`Existing user logging in with Google: ${user.id}`);
+
+      // Update last login time
+      await db.collection(COLLECTIONS.USERS).doc(user.id).update({
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        user: toUserResponse(user),
+        isNewUser: false,
+      };
+    } else {
+      // Create new user
+
+      // Extract first and last name from display name
+      const nameParts = tokenData.name.trim().split(' ');
+      const firstName = nameParts[0] || 'User';
+      const lastName = nameParts.slice(1).join(' ') || 'Google';
+
+      const userId = uuidv4();
+      const now = new Date().toISOString();
+
+      const newUser: User = {
+        id: userId,
+        firstName,
+        lastName,
+        age: 18, // Default age for OAuth users
+        email: tokenData.email,
+        password: '', // No password for OAuth users
+        provider: 'google',
+        providerId: tokenData.uid,
+        createdAt: now,
+        updatedAt: now,
+        isActive: true,
+        failedLoginAttempts: 0,
+      };
+
+      // Save to Firestore
+      await db.collection(COLLECTIONS.USERS).doc(userId).set(newUser);
+
+      logger.info(`New Google user created: ${userId}`);
+
+      return {
+        user: toUserResponse(newUser),
+        isNewUser: true,
+      };
+    }
+  } catch (error) {
+    logger.error('Error logging in with Google', error);
     throw error;
   }
 }

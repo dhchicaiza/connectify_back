@@ -6,6 +6,7 @@ import {
   logout,
   forgotPassword,
   resetPassword,
+  googleSignIn,
   oauthCallback,
 } from '../controllers/auth.controller';
 import {
@@ -53,9 +54,17 @@ router.post('/forgot-password', passwordResetRateLimiter, asyncHandler(forgotPas
 router.post('/reset-password', asyncHandler(resetPassword));
 
 /**
- * @route   POST /api/auth/oauth
- * @desc    OAuth login/signup (Google/Facebook)
+ * @route   POST /api/auth/google
+ * @desc    Google Sign-In (verify ID token)
  * @access  Public
+ */
+router.post('/google', loginRateLimiter, asyncHandler(googleSignIn));
+
+/**
+ * @route   POST /api/auth/oauth
+ * @desc    OAuth login/signup (Facebook and legacy support)
+ * @access  Public
+ * @deprecated Use /api/auth/google for Google Sign-In
  */
 router.post('/oauth', asyncHandler(oauthCallback));
 
