@@ -613,3 +613,28 @@ export async function loginWithGoogle(idToken: string): Promise<{
     throw error;
   }
 }
+
+/**
+ * Delete user account permanently
+ * @param userId - User ID to delete
+ * @returns Promise that resolves when user is deleted
+ */
+export async function deleteUser(userId: string): Promise<void> {
+  try {
+    const db = getFirestore();
+    const userRef = db.collection(COLLECTIONS.USERS).doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      throw new NotFoundError('User not found');
+    }
+
+    // Delete user document from Firestore
+    await userRef.delete();
+
+    logger.info(`User account deleted successfully: ${userId}`);
+  } catch (error) {
+    logger.error('Error deleting user account', error);
+    throw error;
+  }
+}

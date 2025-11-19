@@ -138,12 +138,14 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<Re
       throw new UnauthorizedError('User not authenticated');
     }
 
-    // Note: This is a placeholder. Actual deletion logic can be implemented later.
-    // For now, we'll just mark the account as inactive or soft-delete it.
+    const userId = req.user.userId;
 
-    logger.info(`Account deletion requested for user: ${req.user.userId}`);
+    // Delete user account from database
+    await authService.deleteUser(userId);
 
-    return sendSuccess(res, 200, null, 'Account deletion requested');
+    logger.info(`Account deleted successfully for user: ${userId}`);
+
+    return sendSuccess(res, 200, null, 'Account deleted successfully');
   } catch (error) {
     logger.error('Delete account error', error);
     throw error;
