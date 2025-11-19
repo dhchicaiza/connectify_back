@@ -613,3 +613,183 @@ export async function loginWithGoogle(idToken: string): Promise<{
     throw error;
   }
 }
+
+/**
+ * Verifies a GitHub ID Token using Firebase Admin SDK and extracts user information.
+ *
+ * @async
+ * @function verifyGitHubToken
+ * @param {string} idToken - GitHub ID token obtained from Firebase Authentication client SDK
+ * @returns {Promise<Object>} Decoded token data containing user information
+ * @returns {string} return.uid - Firebase user unique identifier
+ * @returns {string} return.email - User's email address
+ * @returns {string} return.name - User's display name from GitHub account
+ * @returns {string} [return.picture] - URL to user's profile picture (optional)
+ * @returns {boolean} return.email_verified - Whether the email has been verified
+ *
+ * @throws {BadRequestError} If email is not found in token
+ * @throws {UnauthorizedError} If token verification fails or token is invalid
+ *
+ * @description
+ * This function uses Firebase Admin SDK to verify the authenticity of the GitHub ID token.
+ * It ensures that:
+ * - The token is valid and signed by GitHub
+ * - The token has not expired
+ * - The email address is present
+ *
+ * @example
+ * const tokenData = await verifyGitHubToken('eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...');
+ * console.log(tokenData.email); // 'user@example.com'
+ * console.log(tokenData.uid); // 'firebase-user-id'
+ */
+export async function verifyGitHubToken(idToken: string): Promise<{
+  uid: string;
+  email: string;
+  name: string;
+  picture?: string;
+  email_verified: boolean;
+}> {
+  try {
+    const auth = getAuth();
+
+    // Verify the ID token using Firebase Admin SDK
+    const decodedToken = await auth.verifyIdToken(idToken);
+
+    // Extract user information
+    const { uid, email, name, picture, email_verified } = decodedToken;
+
+    if (!email) {
+      throw new BadRequestError('Email not found in token');
+    }
+
+    logger.info(`GitHub token verified for user: ${uid}`);
+
+    return {
+      uid,
+      email,
+      name: name || '',
+      picture,
+      email_verified: email_verified || false,
+    };
+  } catch (error) {
+    logger.error('Error verifying GitHub token', error);
+    throw new UnauthorizedError('Invalid GitHub authentication token');
+  }
+}
+
+/**
+ * Authenticates a user with GitHub OAuth or creates a new account if the user doesn't exist.
+ *
+ * @async
+ * @function loginWithGitHub
+ * @param {string} idToken - GitHub ID token obtained from Firebase Authentication client SDK
+ * @returns {Promise<Object>} Authentication result containing user data and creation status
+ * @returns {UserResponse} return.user - User information without sensitive data (password excluded)
+ * @returns {boolean} return.isNewUser - Indicates whether a new user account was created (true) or existing user logged in (false)
+ *
+ * @throws {UnauthorizedError} If the GitHub token is invalid or verification fails
+ * @throws {Error} If database operations fail
+ *
+ * @description
+ * This function implements the complete GitHub Sign-In flow:
+ *
+ * **For existing users:**
+ * 1. Verifies the GitHub ID token using Firebase Admin SDK
+ * 2. Searches for user by email in Firestore
+ * 3. Updates the last login timestamp
+ * 4. Returns user data with isNewUser: false
+ *
+ * **For new users:**
+ * 1. Verifies the GitHub ID token
+ * 2. Extracts first and last name from GitHub display name
+ * 3. Creates a new user document in Firestore with:
+ *    - Unique UUID
+ *    - GitHub provider information
+ *    - Default age (18)
+ *    - No password (OAuth users don't need passwords)
+ * 4. Returns user data with isNewUser: true
+ *
+ * **Security features:**
+ * - Token verification ensures authenticity
+ * - Provider ID is stored for future reference
+ * - No password is stored for OAuth users
+ *
+ * @example
+ * const result = await loginWithGitHub('eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...');
+ *
+ * if (result.isNewUser) {
+ *   console.log('New user created:', result.user.email);
+ * } else {
+ *   console.log('Existing user logged in:', result.user.email);
+ * }
+ *
+ * // Generate JWT for the user
+ * const token = generateToken({ userId: result.user.id, email: result.user.email });
+ */
+export async function loginWithGitHub(idToken: string): Promise<{
+  user: UserResponse;
+  isNewUser: boolean;
+}> {
+  try {
+    // Verify the GitHub token
+    const tokenData = await verifyGitHubToken(idToken);
+
+    const db = getFirestore();
+
+    // Check if user exists by email
+    let user = await getUserByEmail(tokenData.email);
+
+    if (user) {
+      // User exists - update their info if needed
+      logger.info(`Existing user logging in with GitHub: ${user.id}`);
+
+      // Update last login time
+      await db.collection(COLLECTIONS.USERS).doc(user.id).update({
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        user: toUserResponse(user),
+        isNewUser: false,
+      };
+    } else {
+      // Create new user
+
+      // Extract first and last name from display name
+      const nameParts = tokenData.name.trim().split(' ');
+      const firstName = nameParts[0] || 'User';
+      const lastName = nameParts.slice(1).join(' ') || 'GitHub';
+
+      const userId = uuidv4();
+      const now = new Date().toISOString();
+
+      const newUser: User = {
+        id: userId,
+        firstName,
+        lastName,
+        age: 18, // Default age for OAuth users
+        email: tokenData.email,
+        password: '', // No password for OAuth users
+        provider: 'github',
+        providerId: tokenData.uid,
+        createdAt: now,
+        updatedAt: now,
+        isActive: true,
+        failedLoginAttempts: 0,
+      };
+
+      // Save to Firestore
+      await db.collection(COLLECTIONS.USERS).doc(userId).set(newUser);
+
+      logger.info(`New GitHub user created: ${userId}`);
+
+      return {
+        user: toUserResponse(newUser),
+        isNewUser: true,
+      };
+    }
+  } catch (error) {
+    logger.error('Error logging in with GitHub', error);
+    throw error;
+  }
+}

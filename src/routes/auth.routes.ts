@@ -7,6 +7,7 @@ import {
   forgotPassword,
   resetPassword,
   googleSignIn,
+  githubSignIn,
   oauthCallback,
 } from '../controllers/auth.controller';
 import {
@@ -61,10 +62,17 @@ router.post('/reset-password', asyncHandler(resetPassword));
 router.post('/google', loginRateLimiter, asyncHandler(googleSignIn));
 
 /**
+ * @route   POST /api/auth/github
+ * @desc    GitHub Sign-In (verify ID token)
+ * @access  Public
+ */
+router.post('/github', loginRateLimiter, asyncHandler(githubSignIn));
+
+/**
  * @route   POST /api/auth/oauth
  * @desc    OAuth login/signup (Facebook and legacy support)
  * @access  Public
- * @deprecated Use /api/auth/google for Google Sign-In
+ * @deprecated Use /api/auth/google for Google Sign-In or /api/auth/github for GitHub Sign-In
  */
 router.post('/oauth', asyncHandler(oauthCallback));
 
