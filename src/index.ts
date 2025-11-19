@@ -43,10 +43,63 @@ function configureMiddleware(): void {
   app.use(helmet());
 
   // CORS configuration
+  const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+    : [];
+
+  // In development, also allow localhost origins
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const developmentOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+  ];
+
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) {
+          return callback(null, true);
+        }
+
+        // Normalize origin (remove trailing slash)
+        const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+
+        // Check if origin is in allowed list (with or without trailing slash)
+        const isAllowed = allowedOrigins.some((allowed) => {
+          const normalizedAllowed = allowed.endsWith('/') ? allowed.slice(0, -1) : allowed;
+          return normalizedAllowed === normalizedOrigin || allowed === origin;
+        });
+
+        // In development, also check localhost origins
+        if (isDevelopment && developmentOrigins.includes(normalizedOrigin)) {
+          return callback(null, true);
+        }
+
+        // If no origins configured, allow all in development
+        if (allowedOrigins.length === 0) {
+          if (isDevelopment) {
+            logger.warn('CORS: No origins configured, allowing all in development');
+            return callback(null, true);
+          }
+          logger.warn('CORS: No origins configured in production, blocking request');
+          return callback(new Error('CORS not configured'));
+        }
+
+        if (isAllowed) {
+          return callback(null, true);
+        }
+
+        logger.warn(`CORS blocked request from origin: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
+      },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      preflightContinue: false,
+      optionsSuccessStatus: 204,
     })
   );
 
