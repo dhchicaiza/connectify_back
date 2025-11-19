@@ -208,6 +208,53 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 }
 
 /**
+ * Verifies a user's current password
+ *
+ * @async
+ * @function verifyUserPassword
+ * @param {string} userId - User ID
+ * @param {string} password - Plain text password to verify
+ * @returns {Promise<boolean>} True if password matches, false otherwise
+ *
+ * @throws {NotFoundError} If user is not found
+ * @throws {Error} If database operation fails
+ *
+ * @description
+ * This function retrieves the user's hashed password from the database
+ * and compares it with the provided plain text password using bcrypt.
+ * Used for verifying current password before allowing password changes.
+ *
+ * @example
+ * const isValid = await verifyUserPassword('user-uuid', 'MyPassword123!');
+ * if (isValid) {
+ *   console.log('Password is correct');
+ * }
+ */
+export async function verifyUserPassword(userId: string, password: string): Promise<boolean> {
+  try {
+    const db = getFirestore();
+    const userDoc = await db.collection(COLLECTIONS.USERS).doc(userId).get();
+
+    if (!userDoc.exists) {
+      throw new NotFoundError('User not found');
+    }
+
+    const user = userDoc.data() as User;
+
+    // Users authenticated via OAuth don't have passwords
+    if (!user.password || user.provider !== 'email') {
+      return false;
+    }
+
+    // Compare provided password with stored hash
+    return await comparePassword(password, user.password);
+  } catch (error) {
+    logger.error('Error verifying user password', error);
+    throw error;
+  }
+}
+
+/**
  * Request password reset
  * @param email - User email
  */
@@ -300,10 +347,34 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 /**
- * Update user profile
- * @param userId - User ID
- * @param updateData - Fields to update
- * @returns Updated user response
+ * Updates user profile information including optional password change
+ *
+ * @async
+ * @function updateUserProfile
+ * @param {string} userId - User ID
+ * @param {Object} updateData - Fields to update
+ * @param {string} [updateData.firstName] - User's first name
+ * @param {string} [updateData.lastName] - User's last name
+ * @param {number} [updateData.age] - User's age
+ * @param {string} [updateData.email] - User's email address
+ * @param {string} [updateData.password] - New password (will be hashed before storing)
+ * @returns {Promise<UserResponse>} Updated user response
+ *
+ * @throws {NotFoundError} If user is not found
+ * @throws {ConflictError} If email is already in use by another user
+ * @throws {Error} If database operation fails
+ *
+ * @description
+ * This function allows updating user profile fields. If a password is provided,
+ * it will be hashed using bcrypt before storing. Email uniqueness is verified
+ * before updating. The updatedAt timestamp is automatically set.
+ *
+ * @example
+ * const updated = await updateUserProfile('user-uuid', {
+ *   firstName: 'John',
+ *   email: 'newemail@example.com',
+ *   password: 'NewSecurePass123!'
+ * });
  */
 export async function updateUserProfile(
   userId: string,
@@ -312,6 +383,7 @@ export async function updateUserProfile(
     lastName?: string;
     age?: number;
     email?: string;
+    password?: string;
   }
 ): Promise<UserResponse> {
   try {
@@ -330,11 +402,17 @@ export async function updateUserProfile(
       }
     }
 
-    // Update user
-    const updates = {
+    // Prepare updates object
+    const updates: any = {
       ...updateData,
       updatedAt: new Date().toISOString(),
     };
+
+    // Hash password if provided
+    if (updateData.password) {
+      updates.password = await hashPassword(updateData.password);
+      logger.info(`Password updated for user: ${userId}`);
+    }
 
     await userRef.update(updates);
 

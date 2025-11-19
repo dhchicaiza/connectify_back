@@ -7,6 +7,8 @@ import {
   isValidEmail,
   isValidAge,
   isValidName,
+  isValidPassword,
+  getPasswordError,
   sanitizeString,
 } from '../utils/validators';
 import { logger } from '../utils/logger';
@@ -40,10 +42,10 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<Re
       throw new UnauthorizedError('User not authenticated');
     }
 
-    const { firstName, lastName, age, email } = req.body;
+    const { firstName, lastName, age, email, password, currentPassword } = req.body;
 
     // Validate that at least one field is provided
-    if (!firstName && !lastName && !age && !email) {
+    if (!firstName && !lastName && !age && !email && !password) {
       throw new BadRequestError('At least one field must be provided for update');
     }
 
@@ -52,6 +54,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<Re
       lastName?: string;
       age?: number;
       email?: string;
+      password?: string;
     } = {};
 
     // Validate and add firstName if provided
@@ -87,6 +90,32 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<Re
         throw new BadRequestError('Invalid email format');
       }
       updateData.email = sanitizedEmail;
+    }
+
+    // Validate and add password if provided
+    if (password !== undefined) {
+      // Require current password for security when changing password
+      if (!currentPassword) {
+        throw new BadRequestError('Current password is required to change password');
+      }
+
+      // Validate new password strength
+      if (!isValidPassword(password)) {
+        const passwordError = getPasswordError(password);
+        throw new BadRequestError(passwordError || 'Invalid password');
+      }
+
+      // Verify current password before allowing change
+      const isCurrentPasswordValid = await authService.verifyUserPassword(
+        req.user.userId,
+        currentPassword
+      );
+
+      if (!isCurrentPasswordValid) {
+        throw new BadRequestError('Current password is incorrect');
+      }
+
+      updateData.password = password;
     }
 
     // Update user profile
