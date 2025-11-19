@@ -334,9 +334,127 @@ export async function googleSignIn(req: AuthRequest, res: Response): Promise<Res
 }
 
 /**
+ * GitHub Sign-In endpoint controller (User Story H2 - OAuth Login)
+ *
+ * @async
+ * @function githubSignIn
+ * @route POST /api/auth/github
+ * @access Public
+ * @rateLimit 5 requests per 10 minutes (loginRateLimiter)
+ *
+ * @param {AuthRequest} req - Express request object
+ * @param {string} req.body.idToken - GitHub ID token from Firebase Authentication client SDK
+ * @param {Response} res - Express response object
+ *
+ * @returns {Promise<Response>} HTTP 200 with JWT token and user data
+ * @returns {boolean} response.data.success - Always true on success
+ * @returns {Object} response.data.data - Response payload
+ * @returns {string} response.data.data.token - JWT token for API authentication
+ * @returns {UserResponse} response.data.data.user - User information (without password)
+ * @returns {boolean} response.data.data.isNewUser - Whether this is a newly created account
+ * @returns {string} response.data.message - Success message
+ *
+ * @throws {BadRequestError} 400 - If idToken is missing from request body
+ * @throws {UnauthorizedError} 401 - If GitHub token is invalid or verification fails
+ * @throws {TooManyRequestsError} 429 - If rate limit exceeded (5 attempts per 10 min)
+ *
+ * @description
+ * This endpoint implements secure GitHub Sign-In using Firebase ID token verification:
+ *
+ * **Authentication Flow:**
+ * 1. Receives GitHub ID token from frontend (obtained via Firebase Auth client SDK)
+ * 2. Validates that idToken is present in request body
+ * 3. Calls `loginWithGitHub()` service which:
+ *    - Verifies token authenticity with Firebase Admin SDK
+ *    - Creates new user if email doesn't exist
+ *    - Logs in existing user if email is found
+ * 4. Generates JWT token for API authentication
+ * 5. Returns user data and authentication token
+ *
+ * **Security Features:**
+ * - Backend verification of GitHub tokens (not trusting client data)
+ * - Rate limiting prevents brute force attacks
+ * - JWT tokens for stateless authentication
+ *
+ * **Response Format:**
+ * - New user: "Account created successfully with GitHub"
+ * - Existing user: "Login successful with GitHub"
+ *
+ * @example
+ * // Request
+ * POST /api/auth/github
+ * Content-Type: application/json
+ *
+ * {
+ *   "idToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+ * }
+ *
+ * @example
+ * // Response (200 OK)
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "token": "jwt.token.here",
+ *     "user": {
+ *       "id": "uuid",
+ *       "firstName": "John",
+ *       "lastName": "Doe",
+ *       "email": "john@users.noreply.github.com",
+ *       "age": 18,
+ *       "provider": "github",
+ *       "createdAt": "2025-01-18T00:00:00.000Z",
+ *       "updatedAt": "2025-01-18T00:00:00.000Z"
+ *     },
+ *     "isNewUser": true
+ *   },
+ *   "message": "Account created successfully with GitHub"
+ * }
+ *
+ * @see {@link loginWithGitHub} - Service function that handles the authentication logic
+ * @see {@link verifyGitHubToken} - Function that verifies GitHub ID tokens
+ */
+export async function githubSignIn(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { idToken } = req.body;
+
+    // Validate required field
+    if (!idToken) {
+      throw new BadRequestError('GitHub ID token is required');
+    }
+
+    // Login or create user with GitHub
+    const { user, isNewUser } = await authService.loginWithGitHub(idToken);
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    const message = isNewUser
+      ? 'Account created successfully with GitHub'
+      : 'Login successful with GitHub';
+
+    return sendSuccess(
+      res,
+      200,
+      {
+        token,
+        user,
+        isNewUser,
+      },
+      message
+    );
+  } catch (error) {
+    logger.error('GitHub sign-in error', error);
+    throw error;
+  }
+}
+
+/**
  * OAuth callback endpoint (Facebook and legacy support) - H2
  * POST /api/auth/oauth
- * @deprecated Use /api/auth/google for Google Sign-In
+ * @deprecated Use /api/auth/google for Google Sign-In or /api/auth/github for GitHub Sign-In
  */
 export async function oauthCallback(req: AuthRequest, res: Response): Promise<Response> {
   try {
@@ -348,7 +466,7 @@ export async function oauthCallback(req: AuthRequest, res: Response): Promise<Re
     }
 
     // Validate provider
-    if (provider !== 'google' && provider !== 'facebook') {
+    if (provider !== 'google' && provider !== 'facebook' && provider !== 'github') {
       throw new BadRequestError('Invalid OAuth provider');
     }
 

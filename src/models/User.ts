@@ -8,7 +8,7 @@ export interface User {
   age: number;
   email: string;
   password: string; // Hashed with bcrypt
-  provider: 'email' | 'google' | 'facebook';
+  provider: 'email' | 'google' | 'facebook' | 'github';
   providerId?: string; // OAuth provider ID
   createdAt: string; // ISO-8601 format
   updatedAt: string; // ISO-8601 format
@@ -49,7 +49,7 @@ export interface UserResponse {
   lastName: string;
   age: number;
   email: string;
-  provider: 'email' | 'google' | 'facebook';
+  provider: 'email' | 'google' | 'facebook' | 'github';
   createdAt: string;
   updatedAt: string;
 }
