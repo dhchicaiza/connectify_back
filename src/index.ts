@@ -58,7 +58,6 @@ function configureMiddleware(): void {
 
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
       origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) {
