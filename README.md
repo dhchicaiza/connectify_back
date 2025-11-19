@@ -199,7 +199,7 @@ Plataforma web de videoconferencia que permite la creación de reuniones, chat e
 ## 📂 Estructura del Proyecto
 
 ```
-meet_back/                          # Repositorio backend
+connectify_back/                          # Repositorio backend
 ├── .env.example                    # Variables de entorno template
 ├── package.json
 ├── tsconfig.json
@@ -222,7 +222,7 @@ meet_back/                          # Repositorio backend
 ├── tests/                         # Tests unitarios e integración
 └── docs/                          # Documentación técnica
 
-meet_front/                         # Repositorio frontend (separado)
+connectify_front/                         # Repositorio frontend (separado)
 ├── .env.example
 ├── package.json
 ├── tsconfig.json
@@ -243,23 +243,9 @@ meet_front/                         # Repositorio frontend (separado)
 └── public/
 ```
 
----
-
-## 👥 Roles del Equipo (5 integrantes)
-
-| Rol | Responsabilidades |
-|-----|-------------------|
-| **Frontend Developer** | React + TypeScript + SASS. Implementación de UX/UI, responsividad, accesibilidad (WCAG), integración con Figma. |
-| **Backend Developer** | Node.js + Express + TypeScript. API REST, Socket.io, WebRTC/Peer.js, servidores STUN, autenticación JWT, integración Firebase. |
-| **Database Engineer** | Firebase Authentication + Firestore. Diseño de esquemas, colecciones, operaciones CRUD, optimización de queries. |
-| **Project Manager & VCS** | Gestión SCRUM con TAIGA. Planificación de sprints, seguimiento de tareas, administración de GitHub (branches, PR, code reviews). |
-| **QA & UX Tester** | Pruebas de usuario, evaluación de accesibilidad, detección de bugs, retroalimentación UX, elaboración de informes y videos. |
-
----
-
 ## 🔧 Configuración Inicial
 
-### Backend (meet_back)
+### Backend (connectify_back)
 ```bash
 # Instalar dependencias
 npm install
@@ -280,7 +266,7 @@ npm run build
 npm start
 ```
 
-### Frontend (meet_front)
+### Frontend (connectify_front)
 ```bash
 # Instalar dependencias
 npm install
@@ -332,7 +318,7 @@ npm run preview
 
 ### Base URL
 - **Development:** `http://localhost:3000/api`
-- **Production:** `https://meet-api.onrender.com/api`
+- **Production:** `https://connectify-api.onrender.com/api`
 
 ### Authentication
 Most endpoints require a JWT token in the Authorization header:
@@ -851,32 +837,6 @@ Check if server is running.
   "timestamp": "2025-01-01T00:00:00.000Z"
 }
 ```
-
----
-
-## 📦 Entregas por Sprint
-
-### Documentos Requeridos
-1. **Pull Request** con tag `sprint-X-release`
-2. **URLs de producción:**
-   - Frontend: `https://meet-app.vercel.app`
-   - Backend: `https://meet-api.onrender.com`
-3. **Video de pruebas:** máx. 10 min mostrando funcionalidades del sprint
-4. **Informe PDF:** incluye:
-   - Metodología aplicada
-   - Problemas encontrados y soluciones
-   - Capturas de pantalla
-   - Métricas de accesibilidad (Lighthouse)
-   - Lecciones aprendidas
-5. **Sustentación:** presentación pública ante el curso
-
-### Criterios de Evaluación
-- **Funcionalidad:** 40%
-- **Código limpio y documentación:** 20%
-- **UX/UI y accesibilidad:** 20%
-- **Trabajo en equipo (TAIGA):** 10%
-- **Pruebas y calidad:** 10%
-
 ---
 
 ## 🚀 Despliegue

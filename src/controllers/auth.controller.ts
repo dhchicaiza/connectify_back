@@ -215,8 +215,85 @@ export async function resetPassword(req: AuthRequest, res: Response): Promise<Re
 }
 
 /**
- * Google Sign-In endpoint - H2
+ * Google Sign-In endpoint controller (User Story H2 - OAuth Login)
+ *
+ * @async
+ * @function googleSignIn
+ * @route POST /api/auth/google
+ * @access Public
+ * @rateLimit 5 requests per 10 minutes (loginRateLimiter)
+ *
+ * @param {AuthRequest} req - Express request object
+ * @param {string} req.body.idToken - Google ID token from Firebase Authentication client SDK
+ * @param {Response} res - Express response object
+ *
+ * @returns {Promise<Response>} HTTP 200 with JWT token and user data
+ * @returns {boolean} response.data.success - Always true on success
+ * @returns {Object} response.data.data - Response payload
+ * @returns {string} response.data.data.token - JWT token for API authentication
+ * @returns {UserResponse} response.data.data.user - User information (without password)
+ * @returns {boolean} response.data.data.isNewUser - Whether this is a newly created account
+ * @returns {string} response.data.message - Success message
+ *
+ * @throws {BadRequestError} 400 - If idToken is missing from request body
+ * @throws {UnauthorizedError} 401 - If Google token is invalid or verification fails
+ * @throws {TooManyRequestsError} 429 - If rate limit exceeded (5 attempts per 10 min)
+ *
+ * @description
+ * This endpoint implements secure Google Sign-In using Firebase ID token verification:
+ *
+ * **Authentication Flow:**
+ * 1. Receives Google ID token from frontend (obtained via Firebase Auth client SDK)
+ * 2. Validates that idToken is present in request body
+ * 3. Calls `loginWithGoogle()` service which:
+ *    - Verifies token authenticity with Firebase Admin SDK
+ *    - Creates new user if email doesn't exist
+ *    - Logs in existing user if email is found
+ * 4. Generates JWT token for API authentication
+ * 5. Returns user data and authentication token
+ *
+ * **Security Features:**
+ * - Backend verification of Google tokens (not trusting client data)
+ * - Rate limiting prevents brute force attacks
+ * - Only verified Google emails accepted
+ * - JWT tokens for stateless authentication
+ *
+ * **Response Format:**
+ * - New user: "Account created successfully with Google"
+ * - Existing user: "Login successful with Google"
+ *
+ * @example
+ * // Request
  * POST /api/auth/google
+ * Content-Type: application/json
+ *
+ * {
+ *   "idToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+ * }
+ *
+ * @example
+ * // Response (200 OK)
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "token": "jwt.token.here",
+ *     "user": {
+ *       "id": "uuid",
+ *       "firstName": "John",
+ *       "lastName": "Doe",
+ *       "email": "john@gmail.com",
+ *       "age": 18,
+ *       "provider": "google",
+ *       "createdAt": "2025-01-18T00:00:00.000Z",
+ *       "updatedAt": "2025-01-18T00:00:00.000Z"
+ *     },
+ *     "isNewUser": true
+ *   },
+ *   "message": "Account created successfully with Google"
+ * }
+ *
+ * @see {@link loginWithGoogle} - Service function that handles the authentication logic
+ * @see {@link verifyGoogleToken} - Function that verifies Google ID tokens
  */
 export async function googleSignIn(req: AuthRequest, res: Response): Promise<Response> {
   try {

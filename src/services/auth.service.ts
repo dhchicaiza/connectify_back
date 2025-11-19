@@ -352,9 +352,32 @@ export async function updateUserProfile(
 }
 
 /**
- * Verify Google ID Token and extract user information
- * @param idToken - Google ID token from Firebase Authentication
- * @returns Decoded token with user information
+ * Verifies a Google ID Token using Firebase Admin SDK and extracts user information.
+ *
+ * @async
+ * @function verifyGoogleToken
+ * @param {string} idToken - Google ID token obtained from Firebase Authentication client SDK
+ * @returns {Promise<Object>} Decoded token data containing user information
+ * @returns {string} return.uid - Firebase user unique identifier
+ * @returns {string} return.email - User's email address
+ * @returns {string} return.name - User's display name from Google account
+ * @returns {string} [return.picture] - URL to user's profile picture (optional)
+ * @returns {boolean} return.email_verified - Whether the email has been verified by Google
+ *
+ * @throws {BadRequestError} If email is not found in token or email is not verified
+ * @throws {UnauthorizedError} If token verification fails or token is invalid
+ *
+ * @description
+ * This function uses Firebase Admin SDK to verify the authenticity of the Google ID token.
+ * It ensures that:
+ * - The token is valid and signed by Google
+ * - The token has not expired
+ * - The email address is present and verified
+ *
+ * @example
+ * const tokenData = await verifyGoogleToken('eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...');
+ * console.log(tokenData.email); // 'user@gmail.com'
+ * console.log(tokenData.uid); // 'firebase-user-id'
  */
 export async function verifyGoogleToken(idToken: string): Promise<{
   uid: string;
@@ -396,9 +419,54 @@ export async function verifyGoogleToken(idToken: string): Promise<{
 }
 
 /**
- * Login or create user with Google OAuth
- * @param idToken - Google ID token from Firebase Authentication
- * @returns User response and whether user was created
+ * Authenticates a user with Google OAuth or creates a new account if the user doesn't exist.
+ *
+ * @async
+ * @function loginWithGoogle
+ * @param {string} idToken - Google ID token obtained from Firebase Authentication client SDK
+ * @returns {Promise<Object>} Authentication result containing user data and creation status
+ * @returns {UserResponse} return.user - User information without sensitive data (password excluded)
+ * @returns {boolean} return.isNewUser - Indicates whether a new user account was created (true) or existing user logged in (false)
+ *
+ * @throws {UnauthorizedError} If the Google token is invalid or verification fails
+ * @throws {Error} If database operations fail
+ *
+ * @description
+ * This function implements the complete Google Sign-In flow:
+ *
+ * **For existing users:**
+ * 1. Verifies the Google ID token using Firebase Admin SDK
+ * 2. Searches for user by email in Firestore
+ * 3. Updates the last login timestamp
+ * 4. Returns user data with isNewUser: false
+ *
+ * **For new users:**
+ * 1. Verifies the Google ID token
+ * 2. Extracts first and last name from Google display name
+ * 3. Creates a new user document in Firestore with:
+ *    - Unique UUID
+ *    - Google provider information
+ *    - Default age (18)
+ *    - No password (OAuth users don't need passwords)
+ * 4. Returns user data with isNewUser: true
+ *
+ * **Security features:**
+ * - Token verification ensures authenticity
+ * - Only verified Google emails are accepted
+ * - Provider ID is stored for future reference
+ * - No password is stored for OAuth users
+ *
+ * @example
+ * const result = await loginWithGoogle('eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...');
+ *
+ * if (result.isNewUser) {
+ *   console.log('New user created:', result.user.email);
+ * } else {
+ *   console.log('Existing user logged in:', result.user.email);
+ * }
+ *
+ * // Generate JWT for the user
+ * const token = generateToken({ userId: result.user.id, email: result.user.email });
  */
 export async function loginWithGoogle(idToken: string): Promise<{
   user: UserResponse;
