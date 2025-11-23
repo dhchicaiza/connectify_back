@@ -457,7 +457,14 @@ export async function updateUserProfile(
  * console.log(tokenData.email); // 'user@gmail.com'
  * console.log(tokenData.uid); // 'firebase-user-id'
  */
-export async function verifyGoogleToken(idToken: string): Promise<{
+interface VerifyTokenOptions {
+  requireEmailVerified?: boolean;
+}
+
+export async function verifyGoogleToken(
+  idToken: string,
+  options: VerifyTokenOptions = {}
+): Promise<{
   uid: string;
   email: string;
   name: string;
@@ -477,7 +484,7 @@ export async function verifyGoogleToken(idToken: string): Promise<{
       throw new BadRequestError('Email not found in token');
     }
 
-    if (!email_verified) {
+    if (options.requireEmailVerified !== false && !email_verified) {
       throw new BadRequestError('Email not verified');
     }
 
@@ -546,24 +553,20 @@ export async function verifyGoogleToken(idToken: string): Promise<{
  * // Generate JWT for the user
  * const token = generateToken({ userId: result.user.id, email: result.user.email });
  */
-export async function loginWithGoogle(idToken: string): Promise<{
-  user: UserResponse;
-  isNewUser: boolean;
-}> {
+async function loginWithOAuthProvider(
+  idToken: string,
+  provider: 'google' | 'github'
+): Promise<{ user: UserResponse; isNewUser: boolean }> {
   try {
-    // Verify the Google token
-    const tokenData = await verifyGoogleToken(idToken);
-
+    const tokenData = await verifyGoogleToken(idToken, {
+      requireEmailVerified: provider === 'google',
+    });
     const db = getFirestore();
 
-    // Check if user exists by email
     let user = await getUserByEmail(tokenData.email);
 
     if (user) {
-      // User exists - update their info if needed
-      logger.info(`Existing user logging in with Google: ${user.id}`);
-
-      // Update last login time
+      logger.info(`Existing user logging in with ${provider}: ${user.id}`);
       await db.collection(COLLECTIONS.USERS).doc(user.id).update({
         updatedAt: new Date().toISOString(),
       });
@@ -572,46 +575,50 @@ export async function loginWithGoogle(idToken: string): Promise<{
         user: toUserResponse(user),
         isNewUser: false,
       };
-    } else {
-      // Create new user
-
-      // Extract first and last name from display name
-      const nameParts = tokenData.name.trim().split(' ');
-      const firstName = nameParts[0] || 'User';
-      const lastName = nameParts.slice(1).join(' ') || 'Google';
-
-      const userId = uuidv4();
-      const now = new Date().toISOString();
-
-      const newUser: User = {
-        id: userId,
-        firstName,
-        lastName,
-        age: 18, // Default age for OAuth users
-        email: tokenData.email,
-        password: '', // No password for OAuth users
-        provider: 'google',
-        providerId: tokenData.uid,
-        createdAt: now,
-        updatedAt: now,
-        isActive: true,
-        failedLoginAttempts: 0,
-      };
-
-      // Save to Firestore
-      await db.collection(COLLECTIONS.USERS).doc(userId).set(newUser);
-
-      logger.info(`New Google user created: ${userId}`);
-
-      return {
-        user: toUserResponse(newUser),
-        isNewUser: true,
-      };
     }
+
+    const nameParts = (tokenData.name || '').trim().split(' ');
+    const firstName = nameParts[0] || 'User';
+    const lastName = nameParts.slice(1).join(' ') || provider;
+
+    const userId = uuidv4();
+    const now = new Date().toISOString();
+
+    const newUser: User = {
+      id: userId,
+      firstName,
+      lastName,
+      age: 18,
+      email: tokenData.email,
+      password: '',
+      provider,
+      providerId: tokenData.uid,
+      createdAt: now,
+      updatedAt: now,
+      isActive: true,
+      failedLoginAttempts: 0,
+    };
+
+    await db.collection(COLLECTIONS.USERS).doc(userId).set(newUser);
+
+    logger.info(`New ${provider} user created: ${userId}`);
+
+    return {
+      user: toUserResponse(newUser),
+      isNewUser: true,
+    };
   } catch (error) {
-    logger.error('Error logging in with Google', error);
+    logger.error(`Error logging in with ${provider}`, error);
     throw error;
   }
+}
+
+export async function loginWithGoogle(idToken: string) {
+  return loginWithOAuthProvider(idToken, 'google');
+}
+
+export async function loginWithGithub(idToken: string) {
+  return loginWithOAuthProvider(idToken, 'github');
 }
 
 /**

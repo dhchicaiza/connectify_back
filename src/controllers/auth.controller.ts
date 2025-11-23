@@ -334,6 +334,45 @@ export async function googleSignIn(req: AuthRequest, res: Response): Promise<Res
 }
 
 /**
+ * GitHub Sign-In endpoint controller.
+ * POST /api/auth/github
+ */
+export async function githubSignIn(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      throw new BadRequestError('GitHub ID token is required');
+    }
+
+    const { user, isNewUser } = await authService.loginWithGithub(idToken);
+
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    const message = isNewUser
+      ? 'Account created successfully with GitHub'
+      : 'Login successful with GitHub';
+
+    return sendSuccess(
+      res,
+      200,
+      {
+        token,
+        user,
+        isNewUser,
+      },
+      message
+    );
+  } catch (error) {
+    logger.error('GitHub sign-in error', error);
+    throw error;
+  }
+}
+
+/**
  * OAuth callback endpoint (Facebook and legacy support) - H2
  * POST /api/auth/oauth
  * @deprecated Use /api/auth/google for Google Sign-In

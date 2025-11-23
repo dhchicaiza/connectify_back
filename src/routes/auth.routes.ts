@@ -7,6 +7,7 @@ import {
   forgotPassword,
   resetPassword,
   googleSignIn,
+  githubSignIn,
   oauthCallback,
 } from '../controllers/auth.controller';
 import {
@@ -59,6 +60,13 @@ router.post('/reset-password', asyncHandler(resetPassword));
  * @access  Public
  */
 router.post('/google', loginRateLimiter, asyncHandler(googleSignIn));
+
+/**
+ * @route   POST /api/auth/github
+ * @desc    GitHub Sign-In (verify Firebase ID token)
+ * @access  Public
+ */
+router.post('/github', loginRateLimiter, asyncHandler(githubSignIn));
 
 /**
  * @route   POST /api/auth/oauth
