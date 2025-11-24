@@ -144,3 +144,28 @@ export async function endMeeting(req: AuthRequest, res: Response): Promise<Respo
     throw error;
   }
 }
+
+/**
+ * End a meeting
+ * DELETE /api/meetings/:id
+ */
+export async function deleteMeeting(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    if (!req.user) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
+    const { id } = req.params;
+
+    if (!id) {
+      throw new BadRequestError('Meeting ID is required');
+    }
+
+    await meetingService.deleteMeeting(id, req.user.userId);
+
+    return sendSuccess(res, 200, null, 'Meeting deleted successfully');
+  } catch (error) {
+    logger.error('Delete meeting error', error);
+    throw error;
+  }
+}

@@ -7,6 +7,7 @@ import {
   joinMeeting,
   leaveMeeting,
   endMeeting,
+  deleteMeeting,
 } from '../controllers/meetings.controller';
 import { authenticate } from '../middleware/auth';
 
@@ -56,5 +57,12 @@ router.post('/:id/leave', asyncHandler(leaveMeeting));
  * @access  Protected
  */
 router.post('/:id/end', asyncHandler(endMeeting));
+
+/**
+ * @route   DELETE /api/meetings/:id
+ * @desc    Delete a meeting (creator only)
+ * @access  Protected
+ */
+router.delete('/:id', asyncHandler(deleteMeeting));
 
 export default router;

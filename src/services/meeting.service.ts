@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getFirestore, COLLECTIONS } from '../config/firebase';
 import { Meeting, CreateMeetingData, toMeetingResponse, MeetingResponse } from '../models/Meeting';
-import { NotFoundError, BadRequestError } from '../utils/customErrors';
+import { NotFoundError, BadRequestError, ConflictError } from '../utils/customErrors';
 import { logger } from '../utils/logger';
 
 const DEFAULT_MAX_PARTICIPANTS = 10;
@@ -238,6 +238,44 @@ export async function endMeeting(meetingId: string, userId: string): Promise<voi
     logger.info(`Meeting ended: ${meetingId} by user: ${userId}`);
   } catch (error) {
     logger.error('Error ending meeting', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a meeting
+ * @param meetingId - Meeting ID
+ * @param userId - User ID (must be creator)
+ */
+export async function deleteMeeting(meetingId: string, userId: string): Promise<void> {
+  try {
+    const db = getFirestore();
+    const meetingRef = db.collection(COLLECTIONS.MEETINGS).doc(meetingId);
+    const meetingDoc = await meetingRef.get();
+
+    if (!meetingDoc.exists) {
+      throw new NotFoundError('Meeting not found');
+    }
+
+    const meeting = meetingDoc.data() as Meeting;
+
+    // Check if user is the creator
+    if (meeting.createdBy !== userId) {
+      throw new BadRequestError('Only the meeting creator can delete the meeting');
+    }
+
+    // All participants must have leave the meeting
+    meeting.participants.map((participant) => {
+      // If there's at least one participant on the meeting throw error
+      if (participant.active === true) throw new ConflictError('All participants must leave the meeting');
+    })
+
+    // Delete the meeting
+    await meetingRef.delete();
+
+    logger.info(`Meeting deleted: ${meetingId} by user: ${userId}`);
+  } catch (error) {
+    logger.error('Error deleting meeting', error);
     throw error;
   }
 }
