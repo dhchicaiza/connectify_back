@@ -7,6 +7,7 @@ import {
   joinMeeting,
   leaveMeeting,
   endMeeting,
+  generateMeetingSummary,
 } from '../controllers/meetings.controller';
 import { authenticate } from '../middleware/auth';
 
@@ -56,5 +57,12 @@ router.post('/:id/leave', asyncHandler(leaveMeeting));
  * @access  Protected
  */
 router.post('/:id/end', asyncHandler(endMeeting));
+
+/**
+ * @route   POST /api/meetings/:id/summary
+ * @desc    Generate AI summary for a meeting
+ * @access  Protected
+ */
+router.post('/:id/summary', asyncHandler(generateMeetingSummary));
 
 export default router;

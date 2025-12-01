@@ -4,6 +4,7 @@ import * as meetingService from '../services/meeting.service';
 import { sendSuccess } from '../utils/responseFormatter';
 import { BadRequestError, UnauthorizedError } from '../utils/customErrors';
 import { logger } from '../utils/logger';
+import geminiService from '../services/gemini.service';
 
 /**
  * Create a new meeting - H5
@@ -141,6 +142,42 @@ export async function endMeeting(req: AuthRequest, res: Response): Promise<Respo
     return sendSuccess(res, 200, null, 'Meeting ended successfully');
   } catch (error) {
     logger.error('End meeting error', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate AI summary for a meeting
+ * POST /api/meetings/:id/summary
+ */
+export async function generateMeetingSummary(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    if (!req.user) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const { messages } = req.body;
+
+    if (!id) {
+      throw new BadRequestError('Meeting ID is required');
+    }
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      throw new BadRequestError('Chat messages are required to generate summary');
+    }
+
+    logger.info(`Generating summary for meeting ${id}`);
+
+    // Generate summary using Gemini AI
+    const summary = await geminiService.generateMeetingSummary(messages, id);
+
+    // Save summary to Firestore
+    await meetingService.saveMeetingSummary(id, summary);
+
+    return sendSuccess(res, 200, summary, 'Summary generated successfully');
+  } catch (error) {
+    logger.error('Generate summary error', error);
     throw error;
   }
 }

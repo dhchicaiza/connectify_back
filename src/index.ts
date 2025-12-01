@@ -1,7 +1,11 @@
+import dotenv from 'dotenv';
+
+// Load environment variables FIRST, before any other imports
+dotenv.config();
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { initializeFirebase } from './config/firebase';
 import { initializeEmailTransporter } from './config/email';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -9,9 +13,6 @@ import { logger } from './utils/logger';
 import authRoutes from './routes/auth.routes';
 import usersRoutes from './routes/users.routes';
 import meetingsRoutes from './routes/meetings.routes';
-
-// Load environment variables
-dotenv.config();
 
 // Initialize Express app
 const app: Application = express();
